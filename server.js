@@ -15,6 +15,7 @@ import Purchasedcourse from "./src/Routes/Purchased-routes/Purchased-routs.js";
 import ExamQuestion from "./src/Routes/Exan-Question-Routes.js/Exam-Question-Routes.js";
 import pcmClassRoutes from './src/Routes/PCM-Class-Routes/PCMClassRoutes.js';
 import announcementRoutes from './src/Routes/Announcement-Routes/AnnouncementRoutes.js';
+import contactRoutes from './src/Routes/Contact-Routes/ContactRoutes.js';
 
 // ✅ New Imports for Notification Bell Feature
 import notificationRoutes from './src/Routes/NotificationBell/NotificationRoutes.js'; 
@@ -72,6 +73,7 @@ app.use("/webhook", express.raw({ type: "application/json" }), Payment);
 app.use("/", userRoutes);
 app.use('/api/announcements', announcementRoutes); 
 app.use('/api/pcm', pcmClassRoutes);
+app.use('/', contactRoutes);
 
 // ======================= APPLY SECURITY MIDDLEWARE =======================
 app.use(verifyToken);

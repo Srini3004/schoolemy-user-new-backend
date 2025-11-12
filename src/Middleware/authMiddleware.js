@@ -20,7 +20,8 @@ const PUBLIC_ROUTES = [
   "/allcourses",
   "/courses/user-view",
   "/form",
-  "/courses/:id" // keep this only if route is not protected
+  "/courses/:id", // keep this only if route is not protected
+  "/contact"
 ];
 
 const verifyToken = async (req, res, next) => {
