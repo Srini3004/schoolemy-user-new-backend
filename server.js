@@ -21,9 +21,12 @@ import contactRoutes from "./src/Routes/Contact-Routes/ContactRoutes.js";
 import notificationRoutes from './src/Routes/NotificationBell/NotificationRoutes.js'; 
 import joinRequestRoutes from './src/Routes/NotificationBell/joinRequestRoutes.js';
 import materialRoutes from './src/Routes/NotificationBell/materialRoutes.js';
+import evets from "./src/Routes/Event-Routes/event.routes.js"
+
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8000;
+const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
 
 // Middleware
 app.use(cors());
@@ -74,6 +77,7 @@ app.use("/", userRoutes);
 app.use('/api/announcements', announcementRoutes); 
 app.use('/api/pcm', pcmClassRoutes);
 app.use('/', contactRoutes);
+app.use('/events', evets);
 
 // ======================= APPLY SECURITY MIDDLEWARE =======================
 app.use(verifyToken);
@@ -91,13 +95,22 @@ app.use('/api/my-materials', materialRoutes);
 
 // ======================= CHANGES END HERE =======================
 
-// Start the server
-app.listen(PORT, async () => {
-  await connectDB();
-  const env = process.env.NODE_ENV || "development";
-  console.log(`Server is running on http://localhost:${PORT}`);
-  console.log(`Environment: ${env}`);
-});
+// Connect to database immediately for Lambda
+if (isLambda) {
+  console.log('Running in Lambda environment');
+  // Connect to DB on module load for Lambda
+  connectDB().catch(err => {
+    console.error('Lambda DB connection error:', err);
+  });
+} else {
+  // Start the server for local development
+  app.listen(PORT, async () => {
+    await connectDB();
+    const env = process.env.NODE_ENV || "development";
+    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Environment: ${env}`);
+  });
+}
 
 // Export app for lambda deployment
 export default app;
