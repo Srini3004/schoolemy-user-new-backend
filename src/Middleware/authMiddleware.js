@@ -23,7 +23,9 @@ const PUBLIC_ROUTES = [
   "/courses/:id", // keep this only if route is not protected
   "/contact",
   "/events",
-  "/events/:id"
+  "/events/:id",
+  "/putprofile",
+  "/profile-picture"
 ];
 
 const verifyToken = async (req, res, next) => {
