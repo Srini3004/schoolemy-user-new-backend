@@ -72,11 +72,15 @@ module "lambda" {
   tags         = local.common_tags
 
   # Lambda Configuration
-  zip_file_path = var.lambda_zip_file
-  handler       = var.lambda_handler
-  runtime       = var.lambda_runtime
-  timeout       = var.lambda_timeout
-  memory_size   = var.lambda_memory_size
+  zip_file_path     = var.lambda_zip_file
+  handler           = var.lambda_handler
+  runtime           = var.lambda_runtime
+  timeout           = var.lambda_timeout
+  memory_size       = var.lambda_memory_size
+
+  # If zip is large, upload to S3 (set upload_to_s3 = true and supply s3_bucket_name)
+  upload_to_s3      = true
+  s3_bucket_name    = var.aws_bucket_name
 
   # IAM Role
   lambda_role_arn = module.iam.lambda_role_arn
@@ -119,11 +123,15 @@ module "lambda_cron" {
   tags         = local.common_tags
 
   # Lambda Configuration
-  zip_file_path = var.lambda_zip_file    # Same zip file, different handler
-  handler       = "cron-handler.handler" # Points to cron-handler.js
-  runtime       = var.lambda_runtime
-  timeout       = 300 # 5 minutes timeout for cron jobs
-  memory_size   = 512 # 512 MB memory for cron processing
+  zip_file_path     = var.lambda_zip_file    # Same zip file, different handler
+  handler           = "cron-handler.handler" # Points to cron-handler.js
+  runtime           = var.lambda_runtime
+  timeout           = 300 # 5 minutes timeout for cron jobs
+  memory_size       = 512 # 512 MB memory for cron processing
+
+  # Use S3 upload for large zip packages
+  upload_to_s3      = true
+  s3_bucket_name    = var.aws_bucket_name
 
   # IAM Role (reuse the same role as main Lambda)
   lambda_role_arn = module.iam.lambda_role_arn

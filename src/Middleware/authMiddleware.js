@@ -24,8 +24,7 @@ const PUBLIC_ROUTES = [
   "/contact",
   "/events",
   "/events/:id",
-  "/putprofile",
-  "/profile-picture"
+
 ];
 
 const verifyToken = async (req, res, next) => {

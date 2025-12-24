@@ -160,3 +160,22 @@ variable "reserved_concurrent_executions" {
   type        = number
   default     = -1
 }
+
+# Optional: Upload the zip to S3 and reference it (useful when zip > API upload limit)
+variable "upload_to_s3" {
+  description = "If true, upload the zip to S3 and point Lambda at the S3 object instead of using local filename"
+  type        = bool
+  default     = false
+}
+
+variable "s3_bucket_name" {
+  description = "S3 bucket to upload lambda zip to (required if upload_to_s3 is true)"
+  type        = string
+  default     = ""
+}
+
+variable "s3_key" {
+  description = "Optional S3 key for the uploaded zip (defaults to <project>-<env>.zip)"
+  type        = string
+  default     = ""
+}

@@ -4,27 +4,27 @@
 
 output "function_name" {
   description = "Name of the Lambda function"
-  value       = aws_lambda_function.main.function_name
+  value       = local.lambda.function_name
 }
 
 output "function_arn" {
   description = "ARN of the Lambda function"
-  value       = aws_lambda_function.main.arn
+  value       = local.lambda.arn
 }
 
 output "function_invoke_arn" {
   description = "Invoke ARN of the Lambda function"
-  value       = aws_lambda_function.main.invoke_arn
+  value       = local.lambda.invoke_arn
 }
 
 output "function_version" {
   description = "Latest published version of the Lambda function"
-  value       = aws_lambda_function.main.version
+  value       = local.lambda.version
 }
 
 output "function_qualified_arn" {
   description = "Qualified ARN of the Lambda function"
-  value       = aws_lambda_function.main.qualified_arn
+  value       = local.lambda.qualified_arn
 }
 
 output "function_url" {
