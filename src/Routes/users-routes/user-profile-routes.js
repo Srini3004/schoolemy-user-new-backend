@@ -14,7 +14,7 @@ const router = express.Router();
 // Updated multer configuration to use memory storage for Base64
 const upload = multer({
   storage: multer.memoryStorage(), // Changed from diskStorage to memoryStorage
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB limit
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB limit (aligned with controller validation)
   fileFilter: function (req, file, cb) {
     const allowedTypes = [
       "image/jpeg",
@@ -37,7 +37,7 @@ const upload = multer({
   },
 });
 
-router.get("/profiles", getUserProfile); 
+router.get("/profiles", getUserProfile); // Get user profile (excludes base64 by default, use ?includeImage=true to include)
 router.get("/user/courses", getUserEnrolledCourses); // Get user's enrolled courses
 router.put("/putprofile", updateUserProfile); 
 router.put("/profile-picture", upload.single("profilePicture"), updateProfilePicture);

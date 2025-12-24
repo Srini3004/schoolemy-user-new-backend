@@ -1,4 +1,4 @@
-import { sendOtpEmail } from "../../Utils/EmailTransport.js";
+import { sendOtpEmail } from "../../Notification/EmailTransport.js";
 import { sendOtpSMS } from "../../Utils/MobileTranspost.js";
 import User from "../../Models/User-Model/User-Model.js";
 import { generateOtp } from "../../Utils/OTPGenerate.js";
@@ -9,11 +9,24 @@ import {
   isValidMobile,
 } from "../../Utils/validate.js";
 import bcrypt from "bcryptjs";
+import sharp from "sharp";
+
+// Helper function to convert mobile string to number (removes + prefix if present)
+const convertMobileToNumber = (mobile) => {
+  if (typeof mobile === "number") return mobile;
+  if (typeof mobile === "string") {
+    // Remove + prefix and any spaces, then convert to number
+    const cleaned = mobile.replace(/^\+|\s/g, "");
+    const num = parseInt(cleaned, 10);
+    return isNaN(num) ? null : num;
+  }
+  return null;
+};
 
 
 // Add Base64 utility function
-const convertToBase64 = (file) => {
-  return `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+const convertToBase64 = (buffer, mimetype) => {
+  return `data:${mimetype};base64,${buffer.toString("base64")}`;
 };
 
 // Add file validation function
@@ -25,7 +38,7 @@ const validateImageFile = (file) => {
     "image/gif",
     "image/webp",
   ];
-  const maxSize = 50 * 1024 * 1024; // 50MB
+  const maxSize = 5 * 1024 * 1024; // 5MB
 
   if (!allowedTypes.includes(file.mimetype)) {
     return {
@@ -71,7 +84,9 @@ export const register = async (req, res) => {
       });
     }
 
-    const query = email ? { email } : { mobile };
+    // Convert mobile to number if provided
+    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
+    const query = email ? { email } : { mobile: mobileNumber };
     const existingUser = await User.findOne(query);
 
     if (existingUser) {
@@ -167,8 +182,11 @@ export const completeRegistration = async (req, res) => {
       }
     }
 
-    // 3. Check again if user already exists
-    const query = email ? { email } : { mobile };
+    // 3. Convert mobile to number if provided
+    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
+    
+    // 4. Check again if user already exists
+    const query = email ? { email } : { mobile: mobileNumber };
     const existingUser = await User.findOne(query);
     if (existingUser) {
       return res.status(409).json({
@@ -177,18 +195,27 @@ export const completeRegistration = async (req, res) => {
       });
     }
 
-    // 4. Hash the password
+    // 5. Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 5. Handle file conversion to Base64
+    // 6. Handle file conversion to optimized Base64 (resize & compress to reduce size)
     let profilePictureData = null;
     if (req.file) {
       try {
+        // Resize and compress image using sharp to significantly reduce stored size
+        const optimizedBuffer = await sharp(req.file.buffer)
+          .resize({ width: 512, height: 512, fit: "inside" }) // keep aspect ratio, max 512px
+          .jpeg({ quality: 70 }) // compress to reasonable quality
+          .toBuffer();
+
+        // Store size in kilobytes (KB), rounded to 2 decimal places
+        const sizeInKB = Number((optimizedBuffer.length / 1024).toFixed(2));
+
         profilePictureData = {
-          data: convertToBase64(req.file),
+          data: convertToBase64(optimizedBuffer, "image/jpeg"),
           filename: req.file.originalname,
-          mimetype: req.file.mimetype,
-          size: req.file.size,
+          mimetype: "image/jpeg",
+          size: sizeInKB,
           uploadDate: new Date(),
         };
         
@@ -200,8 +227,10 @@ export const completeRegistration = async (req, res) => {
       }
     }
 
-    // 6. Create the new user with ALL data at once
-    const newUser = new User({
+    // 7. Create the new user with ALL data at once
+    //    - Always include email/mobile from `query`
+    //    - Additionally, if a mobile was provided here, persist it on the user
+    const newUserPayload = {
       ...query,
       password: hashedPassword,
       username,
@@ -213,8 +242,15 @@ export const completeRegistration = async (req, res) => {
       Occupation,
       address: { street, city, state, country, zipCode },
       profilePicture: profilePictureData,
-      registerOtpVerified: true, 
-    });
+      registerOtpVerified: true,
+    };
+
+    // If mobile was sent in this step (even when OTP was via email), save it as well
+    if (mobileNumber) {
+      newUserPayload.mobile = mobileNumber;
+    }
+
+    const newUser = new User(newUserPayload);
 
     // 7. Save the user to the database
     await newUser.save();
@@ -263,7 +299,9 @@ export const resendOtp = async (req, res) => {
     }
     // --- End of validation ---
 
-    const query = email ? { email } : { mobile };
+    // Convert mobile to number if provided
+    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
+    const query = email ? { email } : { mobile: mobileNumber };
     const existingUser = await User.findOne(query);
 
     if (existingUser) {
@@ -318,7 +356,9 @@ export const verifyOtp = async (req, res) => {
   }
 
   try {
-    const query = email ? { email } : { mobile };
+    // Convert mobile to number if provided
+    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
+    const query = email ? { email } : { mobile: mobileNumber };
    
 
     const user = await User.findOne(query);
@@ -381,7 +421,9 @@ export const createPassword = async (req, res) => {
       });
     }
 
-    const query = email ? { email } : { mobile };
+    // Convert mobile to number if provided
+    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
+    const query = email ? { email } : { mobile: mobileNumber };
 
 
     const user = await User.findOne(query).lean();
@@ -480,8 +522,9 @@ export const registerForm = async (req, res) => {
       }
     }
 
-    // Find user
-    const query = email ? { email } : { mobile };
+    // Find user - Convert mobile to number if provided
+    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
+    const query = email ? { email } : { mobile: mobileNumber };
     const user = await User.findOne(query);
 
     if (!user) {
@@ -602,7 +645,9 @@ export const login = async (req, res) => {
   }
 
   try {
-    const query = email ? { email } : { mobile };
+    // Convert mobile to number if provided
+    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
+    const query = email ? { email } : { mobile: mobileNumber };
 
     const user = await User.findOne(query);
 
@@ -645,12 +690,13 @@ export const login = async (req, res) => {
         id: user._id,
         email: user.email,
         username: user.username,
-        profilePicture: user.profilePicture, 
+        //profilePicture: user.profilePicture, 
         role: user.role,
       },
       token,
     });
   } catch (error) {
+    console.error("💥 Login Error:", error);  
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -684,7 +730,9 @@ export const forgotPassword = async (req, res) => {
         .json({ success: false, message: "Email or mobile is required." });
     }
 
-    const query = email ? { email } : { mobile };
+    // Convert mobile to number if provided
+    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
+    const query = email ? { email } : { mobile: mobileNumber };
    
     const user = await User.findOne(query);
 
@@ -811,7 +859,9 @@ export const ForgotResetPassword = async (req, res) => {
       });
     }
 
-    const query = email ? { email } : { mobile };
+    // Convert mobile to number if provided
+    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
+    const query = email ? { email } : { mobile: mobileNumber };
     const user = await User.findOne(query);
 
     if (!user) {
