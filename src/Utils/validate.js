@@ -11,6 +11,8 @@ export const isValidPassword = (password) => {
 
 
 export const isValidMobile = (mobile) => {
-  const mobileRegex = /^\+?[1-9]\d{1,3}\d{9}$/; 
+  // Use E.164 recommended pattern: optional leading +, country code (no leading 0),
+  // followed by subscriber number; total digits between 2 and 15.
+  const mobileRegex = /^\+?[1-9]\d{1,14}$/;
   return mobileRegex.test(mobile);
 };
