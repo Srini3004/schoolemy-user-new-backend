@@ -1,4 +1,4 @@
-import { sendOtpEmail } from "../../Utils/EmailTransport.js";
+import { sendOtpEmail } from "../../Notification/EmailTransport.js";
 import { sendOtpSMS } from "../../Utils/MobileTranspost.js";
 import User from "../../Models/User-Model/User-Model.js";
 import { generateOtp } from "../../Utils/OTPGenerate.js";
@@ -9,24 +9,11 @@ import {
   isValidMobile,
 } from "../../Utils/validate.js";
 import bcrypt from "bcryptjs";
-import sharp from "sharp";
-
-// Helper function to convert mobile string to number (removes + prefix if present)
-const convertMobileToNumber = (mobile) => {
-  if (typeof mobile === "number") return mobile;
-  if (typeof mobile === "string") {
-    // Remove + prefix and any spaces, then convert to number
-    const cleaned = mobile.replace(/^\+|\s/g, "");
-    const num = parseInt(cleaned, 10);
-    return isNaN(num) ? null : num;
-  }
-  return null;
-};
 
 
 // Add Base64 utility function
-const convertToBase64 = (buffer, mimetype) => {
-  return `data:${mimetype};base64,${buffer.toString("base64")}`;
+const convertToBase64 = (file) => {
+  return `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
 };
 
 // Add file validation function
@@ -84,42 +71,49 @@ export const register = async (req, res) => {
       });
     }
 
-    // Convert mobile to number if provided
-    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
-    const query = email ? { email } : { mobile: mobileNumber };
+    const query = email ? { email } : { mobile };
     const existingUser = await User.findOne(query);
 
-    if (existingUser) {
+    if (existingUser && existingUser.registerOtpVerified) {
       return res.status(409).json({
         success: false,
-        message: "User  with these credentials already exists.",
+        message: "User with these credentials already exists.",
       });
     }
 
 
-    // NOTE: We only need the OTP value now
-    const { otp } = generateOtp();
-    
+    // Generate OTP with expiry
+    const { otp, otpExpiresAt } = generateOtp();
+
 
     const result = email
       ? await sendOtpEmail(email, otp)
       : await sendOtpSMS(mobile, otp);
-    
+
 
     if (!result.success) {
       return res.status(400).json({
         success: false,
-        message: `Failed to send OTP. ${result.message}`,
+        message: `Failed to send OTP. ${result.error || result.message || "Unknown error"}`,
       });
     }
 
-    // IMPORTANT: We REMOVED the user creation and user.save() logic here.
+    // Create or update user with OTP
+    // This ensures verifyOtp can find the user and check the OTP
+    await User.findOneAndUpdate(
+      query,
+      {
+        registerOtp: otp,
+        registerOtpExpiresAt: otpExpiresAt,
+        registerOtpVerified: false
+      },
+      { upsert: true, new: true }
+    );
 
-    // NEW: Return the OTP in the response for frontend verification
     return res.status(200).json({
       success: true,
       message: `OTP sent to ${email || mobile}`,
-      otp_for_verification: otp, // This is the new part!
+      otp_for_verification: otp, // Restored for frontend verification in Layout.js
     });
   } catch (error) {
     return res.status(500).json({
@@ -182,11 +176,8 @@ export const completeRegistration = async (req, res) => {
       }
     }
 
-    // 3. Convert mobile to number if provided
-    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
-    
-    // 4. Check again if user already exists
-    const query = email ? { email } : { mobile: mobileNumber };
+    // 3. Check again if user already exists
+    const query = email ? { email } : { mobile };
     const existingUser = await User.findOne(query);
     if (existingUser) {
       return res.status(409).json({
@@ -195,30 +186,21 @@ export const completeRegistration = async (req, res) => {
       });
     }
 
-    // 5. Hash the password
+    // 4. Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 6. Handle file conversion to optimized Base64 (resize & compress to reduce size)
+    // 5. Handle file conversion to Base64
     let profilePictureData = null;
     if (req.file) {
       try {
-        // Resize and compress image using sharp to significantly reduce stored size
-        const optimizedBuffer = await sharp(req.file.buffer)
-          .resize({ width: 512, height: 512, fit: "inside" }) // keep aspect ratio, max 512px
-          .jpeg({ quality: 70 }) // compress to reasonable quality
-          .toBuffer();
-
-        // Store size in kilobytes (KB), rounded to 2 decimal places
-        const sizeInKB = Number((optimizedBuffer.length / 1024).toFixed(2));
-
         profilePictureData = {
-          data: convertToBase64(optimizedBuffer, "image/jpeg"),
+          data: convertToBase64(req.file),
           filename: req.file.originalname,
-          mimetype: "image/jpeg",
-          size: sizeInKB,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
           uploadDate: new Date(),
         };
-        
+
       } catch (error) {
         return res.status(400).json({
           success: false,
@@ -227,10 +209,8 @@ export const completeRegistration = async (req, res) => {
       }
     }
 
-    // 7. Create the new user with ALL data at once
-    //    - Always include email/mobile from `query`
-    //    - Additionally, if a mobile was provided here, persist it on the user
-    const newUserPayload = {
+    // 6. Create the new user with ALL data at once
+    const newUser = new User({
       ...query,
       password: hashedPassword,
       username,
@@ -243,14 +223,7 @@ export const completeRegistration = async (req, res) => {
       address: { street, city, state, country, zipCode },
       profilePicture: profilePictureData,
       registerOtpVerified: true,
-    };
-
-    // If mobile was sent in this step (even when OTP was via email), save it as well
-    if (mobileNumber) {
-      newUserPayload.mobile = mobileNumber;
-    }
-
-    const newUser = new User(newUserPayload);
+    });
 
     // 7. Save the user to the database
     await newUser.save();
@@ -263,11 +236,11 @@ export const completeRegistration = async (req, res) => {
         id: newUser._id,
         email: newUser.email,
         username: newUser.username,
-       
+
       },
     });
   } catch (error) {
-    
+
     return res.status(500).json({
       success: false,
       message: "Internal Server Error during registration.",
@@ -299,14 +272,11 @@ export const resendOtp = async (req, res) => {
     }
     // --- End of validation ---
 
-    // Convert mobile to number if provided
-    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
-    const query = email ? { email } : { mobile: mobileNumber };
+    const query = email ? { email } : { mobile };
     const existingUser = await User.findOne(query);
 
-    if (existingUser) {
-      // The user already exists in the DB, meaning they are a registered user.
-      // It's better to guide them to login or forgot password.
+    if (existingUser && existingUser.registerOtpVerified) {
+      // The user already exists and is verified
       return res.status(409).json({
         success: false,
         message:
@@ -314,9 +284,9 @@ export const resendOtp = async (req, res) => {
       });
     }
 
-    // If user does NOT exist, we proceed to send a new OTP, just like the 'register' function.
-    const { otp } = generateOtp();
-  
+    // If user does NOT exist or is not verified, we proceed to send a new OTP.
+    const { otp, otpExpiresAt } = generateOtp();
+
 
     const result = email
       ? await sendOtpEmail(email, otp)
@@ -325,18 +295,28 @@ export const resendOtp = async (req, res) => {
     if (!result.success) {
       return res.status(400).json({
         success: false,
-        message: `Failed to resend OTP. ${result.message}`,
+        message: `Failed to resend OTP. ${result.error || result.message || "Unknown error"}`,
       });
     }
 
-    // Just like 'register', we send the new OTP back to the frontend
+    // Update user with new OTP
+    await User.findOneAndUpdate(
+      query,
+      {
+        registerOtp: otp,
+        registerOtpExpiresAt: otpExpiresAt,
+        registerOtpVerified: false
+      },
+      { upsert: true, new: true }
+    );
+
     return res.status(200).json({
       success: true,
       message: `New OTP sent to ${email || mobile}`,
-      otp_for_verification: otp, // Send the new OTP back
+      otp_for_verification: otp, // Restored for frontend verification
     });
   } catch (error) {
-    
+
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -356,10 +336,8 @@ export const verifyOtp = async (req, res) => {
   }
 
   try {
-    // Convert mobile to number if provided
-    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
-    const query = email ? { email } : { mobile: mobileNumber };
-   
+    const query = email ? { email } : { mobile };
+
 
     const user = await User.findOne(query);
 
@@ -393,11 +371,11 @@ export const verifyOtp = async (req, res) => {
       .status(200)
       .json({ success: true, message: "OTP verified successfully" });
   } catch (error) {
-    
+
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
-      error: error.mesage,
+      error: error.message,
     });
   }
 };
@@ -421,9 +399,7 @@ export const createPassword = async (req, res) => {
       });
     }
 
-    // Convert mobile to number if provided
-    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
-    const query = email ? { email } : { mobile: mobileNumber };
+    const query = email ? { email } : { mobile };
 
 
     const user = await User.findOne(query).lean();
@@ -454,7 +430,7 @@ export const createPassword = async (req, res) => {
       .status(200)
       .json({ success: true, message: "Password created successfully" });
   } catch (error) {
-    
+
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -522,9 +498,8 @@ export const registerForm = async (req, res) => {
       }
     }
 
-    // Find user - Convert mobile to number if provided
-    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
-    const query = email ? { email } : { mobile: mobileNumber };
+    // Find user
+    const query = email ? { email } : { mobile };
     const user = await User.findOne(query);
 
     if (!user) {
@@ -584,7 +559,7 @@ export const registerForm = async (req, res) => {
           uploadDate: new Date(),
         };
         updateData.profilePicture = profilePictureData;
-       
+
       } catch (error) {
         return res.status(400).json({
           success: false,
@@ -645,9 +620,7 @@ export const login = async (req, res) => {
   }
 
   try {
-    // Convert mobile to number if provided
-    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
-    const query = email ? { email } : { mobile: mobileNumber };
+    const query = email ? { email } : { mobile };
 
     const user = await User.findOne(query);
 
@@ -696,7 +669,6 @@ export const login = async (req, res) => {
       token,
     });
   } catch (error) {
-    console.error("💥 Login Error:", error);  
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -724,16 +696,14 @@ export const forgotPassword = async (req, res) => {
     }
 
     if (!email && !mobile) {
-      
+
       return res
         .status(400)
         .json({ success: false, message: "Email or mobile is required." });
     }
 
-    // Convert mobile to number if provided
-    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
-    const query = email ? { email } : { mobile: mobileNumber };
-   
+    const query = email ? { email } : { mobile };
+
     const user = await User.findOne(query);
 
     if (!user) {
@@ -744,7 +714,7 @@ export const forgotPassword = async (req, res) => {
 
     // Generate OTP
     const { otp, otpExpiresAt } = generateOtp();
-  
+
 
     // Save OTP to user document
     user.forgotPasswordOtp = otp;
@@ -759,7 +729,7 @@ export const forgotPassword = async (req, res) => {
       : await sendOtpSMS(mobile, otp);
 
     if (!result.success) {
-      
+
       return res.status(400).json({
         success: false,
         message: `Failed to send OTP. ${result.message}`,
@@ -859,9 +829,7 @@ export const ForgotResetPassword = async (req, res) => {
       });
     }
 
-    // Convert mobile to number if provided
-    const mobileNumber = mobile ? convertMobileToNumber(mobile) : null;
-    const query = email ? { email } : { mobile: mobileNumber };
+    const query = email ? { email } : { mobile };
     const user = await User.findOne(query);
 
     if (!user) {
