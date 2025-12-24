@@ -1,4 +1,4 @@
-import { sendOtpEmail } from "../../Notification/EmailTransport.js";
+import { sendOtpEmail } from "../../Utils/EmailTransport.js";
 import { sendOtpSMS } from "../../Utils/MobileTranspost.js";
 import User from "../../Models/User-Model/User-Model.js";
 import { generateOtp } from "../../Utils/OTPGenerate.js";

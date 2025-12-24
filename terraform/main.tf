@@ -78,8 +78,8 @@ module "lambda" {
   timeout           = var.lambda_timeout
   memory_size       = var.lambda_memory_size
 
-  # If zip is large, upload to S3 (set upload_to_s3 = true and supply s3_bucket_name)
-  upload_to_s3      = true
+  # If zip is large, upload to S3 (only enable when aws_bucket_name is provided)
+  upload_to_s3      = var.aws_bucket_name != "" ? true : false
   s3_bucket_name    = var.aws_bucket_name
 
   # IAM Role
@@ -129,8 +129,8 @@ module "lambda_cron" {
   timeout           = 300 # 5 minutes timeout for cron jobs
   memory_size       = 512 # 512 MB memory for cron processing
 
-  # Use S3 upload for large zip packages
-  upload_to_s3      = true
+  # Use S3 upload for large zip packages (only enable when aws_bucket_name is provided)
+  upload_to_s3      = var.aws_bucket_name != "" ? true : false
   s3_bucket_name    = var.aws_bucket_name
 
   # IAM Role (reuse the same role as main Lambda)
