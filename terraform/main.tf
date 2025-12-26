@@ -21,7 +21,7 @@ locals {
     NODE_ENV                                     = var.node_env
     MONGO_URL                                    = var.mongo_url
     JWT_SECRET                                   = var.jwt_secret
-    EMAIL_USER                                  = var.EMAIL_USER
+    EMAIL_ADMIN                                  = var.email_admin
     EMAIL_PASS                                   = var.email_pass
     TWILIO_ACCOUNT_SID                           = var.twilio_account_sid
     TWILIO_AUTH_TOKEN                            = var.twilio_auth_token
