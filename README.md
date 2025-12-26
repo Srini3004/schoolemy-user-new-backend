@@ -546,7 +546,7 @@ MONGO_URL=mongodb+srv://username:password@cluster.mongodb.net/learnly-main
 JWT_SECRET=your_secret_key_here
 
 # Email Configuration (Gmail)
-EMAIL_ADMIN=your-email@gmail.com
+EMAIL_USER=your-email@gmail.com
 EMAIL_PASS=your-app-specific-password
 
 # Twilio Configuration
@@ -1338,7 +1338,7 @@ const generatedSignature = crypto
 {
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_ADMIN,
+    user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS  // App-specific password
   }
 }

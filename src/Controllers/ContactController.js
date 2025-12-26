@@ -8,7 +8,7 @@ export const sendContactEmail = async (req, res) => {
       return res.status(400).json({ success: false, message: "Name, email and message are required." });
     }
 
-    const adminEmail = process.env.EMAIL_ADMIN;
+    const adminEmail = process.env.EMAIL_USER;
 
     // Email to site admin
     const mailOptionsToAdmin = {

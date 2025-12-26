@@ -68,7 +68,7 @@ variable "jwt_secret" {
   sensitive   = true
 }
 
-variable "email_admin" {
+variable "EMAIL_USER" {
   description = "Admin email for notifications"
   type        = string
   default     = ""
