@@ -2,19 +2,19 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 dotenv.config();
 
-// Simple Gmail configuration using nodemailer
-// Required env vars: EMAIL_USER (your Gmail), EMAIL_PASS (App Password)
+// Gmail configuration using nodemailer
+// Uses EMAIL_ADMIN and EMAIL_PASS from .env
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER || process.env.EMAIL_ADMIN,
+    user: process.env.EMAIL_ADMIN,
     pass: process.env.EMAIL_PASS,
   },
 });
 
-// Verify connection on startup
+// Verify connection on startup (non-blocking)
 transporter.verify()
-  .then(() => console.log("✅ Nodemailer ready to send emails"))
+  .then(() => console.log("✅ Nodemailer ready to send emails via Gmail"))
   .catch((err) => console.error("❌ Nodemailer verify failed:", err.message));
 
 // Utility to build HTML body
@@ -31,16 +31,14 @@ const buildHtml = (email, otp) => `
 `;
 
 export const sendOtpEmail = async (email, otp) => {
-  const fromAddress = process.env.EMAIL_USER || process.env.EMAIL_ADMIN;
-
-  if (!fromAddress || !process.env.EMAIL_PASS) {
-    console.error("EMAIL_USER or EMAIL_PASS not set in environment");
+  if (!process.env.EMAIL_ADMIN || !process.env.EMAIL_PASS) {
+    console.error("EMAIL_ADMIN or EMAIL_PASS not set in environment");
     return { success: false, message: "Email credentials not configured" };
   }
 
   try {
     await transporter.sendMail({
-      from: fromAddress,
+      from: process.env.EMAIL_ADMIN,
       to: email,
       subject: "Verify Your Schoolemy Account",
       html: buildHtml(email, otp),
